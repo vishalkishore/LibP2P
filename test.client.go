@@ -2,24 +2,34 @@ package main
 
 import (
     "context"
+    "flag"
     "fmt"
+    "os"
     "io/ioutil"
 
     libp2p "github.com/libp2p/go-libp2p"
-    "github.com/libp2p/go-libp2p/core/host"
-    "github.com/libp2p/go-libp2p/core/peer"
-    "github.com/libp2p/go-libp2p/core/network"
-    "github.com/libp2p/go-libp2p/core/protocol"
+    "github.com/libp2p/go-libp2p-core/host"
+    "github.com/libp2p/go-libp2p-core/network"
+    "github.com/libp2p/go-libp2p-core/peer"
+    "github.com/libp2p/go-libp2p-core/protocol"
     ma "github.com/multiformats/go-multiaddr"
 )
 
 func main() {
+    hostAddr := flag.String("host", "", "Host address")
+    flag.Parse()
+
+    if *hostAddr == "" {
+        fmt.Println("Error: Host address must be provided")
+        os.Exit(1)
+    }
+
     ctx := context.Background()
 
     h := createHost()
     defer h.Close()
 
-    info := getServerInfo("/ip4/127.0.0.1/tcp/8080/p2p/QmeBc2W7QSAoFs4gPGVG3hy1gL82ixg1qHBxTYj6Z39RT1")
+    info := getServerInfo(*hostAddr)
 
     connectToServer(ctx, h, info)
 
