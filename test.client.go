@@ -3,11 +3,12 @@ package main
 import (
     "context"
     "fmt"
-	"io/ioutil"
+    "io/ioutil"
 
     libp2p "github.com/libp2p/go-libp2p"
-    // "github.com/libp2p/go-libp2p/core/host"
+    "github.com/libp2p/go-libp2p/core/host"
     "github.com/libp2p/go-libp2p/core/peer"
+    "github.com/libp2p/go-libp2p/core/network"
     "github.com/libp2p/go-libp2p/core/protocol"
     ma "github.com/multiformats/go-multiaddr"
 )
@@ -15,43 +16,61 @@ import (
 func main() {
     ctx := context.Background()
 
-    // Create a new libp2p Host that listens on a random TCP port
+    h := createHost()
+    defer h.Close()
+
+    info := getServerInfo("/ip4/127.0.0.1/tcp/8080/p2p/QmeBc2W7QSAoFs4gPGVG3hy1gL82ixg1qHBxTYj6Z39RT1")
+
+    connectToServer(ctx, h, info)
+
+    s := openStream(ctx, h, info, "/file-share")
+
+    message := readMessage(s)
+
+    fmt.Printf("Received message from server: %s\n", string(message))
+}
+
+func createHost() host.Host {
     h, err := libp2p.New()
     if err != nil {
         panic(err)
     }
+    return h
+}
 
-    // Create a multiaddress for the server
-    maddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/tcp/8080/p2p/QmQfnhjNdgF8AZrYf2f9354T4bnhXf1zUyjttVcxbUPC5X")
+func getServerInfo(maddrStr string) *peer.AddrInfo {
+    maddr, err := ma.NewMultiaddr(maddrStr)
     if err != nil {
         panic(err)
     }
 
-    // Parse the multiaddress to get the server's peer ID
     info, err := peer.AddrInfoFromP2pAddr(maddr)
     if err != nil {
         panic(err)
     }
 
-    // Connect to the server
-    err = h.Connect(ctx, *info)
-
-
-if err != nil {
-	panic(err)
+    return info
 }
 
-// Open a new stream to the server with the "/my-protocol" protocol ID
-s, err := h.NewStream(ctx, info.ID, protocol.ID("/my-protocol"))
-if err != nil {
-	panic(err)
+func connectToServer(ctx context.Context, h host.Host, info *peer.AddrInfo) {
+    err := h.Connect(ctx, *info)
+    if err != nil {
+        panic(err)
+    }
 }
 
-// Read the message from the server
-buf, err := ioutil.ReadAll(s)
-if err != nil {
-	panic(err)
+func openStream(ctx context.Context, h host.Host, info *peer.AddrInfo, protocolID string) network.Stream {
+    s, err := h.NewStream(ctx, info.ID, protocol.ID(protocolID))
+    if err != nil {
+        panic(err)
+    }
+    return s
 }
 
-    fmt.Printf("Received message from server: %s\n", string(buf))
+func readMessage(s network.Stream) []byte {
+    buf, err := ioutil.ReadAll(s)
+    if err != nil {
+        panic(err)
+    }
+    return buf
 }
