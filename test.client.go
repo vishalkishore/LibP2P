@@ -18,20 +18,28 @@ import (
 func main() {
 	ctx := context.Background()
 
-	h := createHost()
+	h, err := createHost()
+	if err != nil {
+		fmt.Println("Error creating host:", err)
+		return
+	}
 	defer h.Close()
 
-	info := getServerInfo("/ip4/127.0.0.1/tcp/8080/p2p/QmTACRYYczNc7qfxpseR1Meac6NHiSbCczvjbJvMHGWjsA")
+	info, err := getServerInfo("/ip4/127.0.0.1/tcp/8080/p2p/QmTACRYYczNc7qfxpseR1Meac6NHiSbCczvjbJvMHGWjsA")
+	if err != nil {
+		fmt.Println("Error getting server info:", err)
+		return
+	}
 
-	connectToServer(ctx, h, info)
-	// if err != nil {
-	// 	fmt.Println("Error connecting to server:", err)
-	// 	return
-	// }
+	err = connectToServer(ctx, h, info)
+	if err != nil {
+		fmt.Println("Error connecting to server:", err)
+		return
+	}
 
 	fmt.Println("Enter:\n1 for chat stream\n2 for file share stream:")
 	var choice int
-	_, err := fmt.Scan(&choice)
+	_, err = fmt.Scan(&choice)
 	if err != nil {
 		fmt.Println("Error reading input:", err)
 		return
@@ -45,63 +53,55 @@ func main() {
 	default:
 		fmt.Println("Invalid choice")
 	}
-
 }
 
-func createHost() host.Host {
-	h, err := libp2p.New()
-	if err != nil {
-		panic(err)
-	}
-	return h
+func createHost() (host.Host, error) {
+	return libp2p.New()
 }
 
-func getServerInfo(maddrStr string) *peer.AddrInfo {
+func getServerInfo(maddrStr string) (*peer.AddrInfo, error) {
 	maddr, err := ma.NewMultiaddr(maddrStr)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	info, err := peer.AddrInfoFromP2pAddr(maddr)
-	if err != nil {
-		panic(err)
-	}
-
-	return info
+	return peer.AddrInfoFromP2pAddr(maddr)
 }
 
-func connectToServer(ctx context.Context, h host.Host, info *peer.AddrInfo) {
-	err := h.Connect(ctx, *info)
-	if err != nil {
-		panic(err)
-	}
+func connectToServer(ctx context.Context, h host.Host, info *peer.AddrInfo) error {
+	return h.Connect(ctx, *info)
 }
 
-func openStream(ctx context.Context, h host.Host, info *peer.AddrInfo, protocolID string) network.Stream {
-	s, err := h.NewStream(ctx, info.ID, protocol.ID(protocolID))
-	if err != nil {
-		panic(err)
+func openStream(ctx context.Context, h host.Host, info *peer.AddrInfo, protocolID string) (network.Stream, error) {
+	return h.NewStream(ctx, info.ID, protocol.ID(protocolID))
+}
+
+func readUserInput(prompt string) (string, error) {
+	fmt.Print(prompt)
+	scanner := bufio.NewScanner(os.Stdin)
+	if !scanner.Scan() {
+		return "", scanner.Err()
 	}
-	return s
+	return scanner.Text(), nil
 }
 
 func handleChatStream(ctx context.Context, h host.Host, info *peer.AddrInfo) {
-	chatStream := openStream(ctx, h, info, "/chat/1.0.0")
-	reader := bufio.NewReader(chatStream) // Read from standard input
+	chatStream, err := openStream(ctx, h, info, "/chat/1.0.0")
+	if err != nil {
+		fmt.Println("Error opening chat stream:", err)
+		return
+	}
+
+	reader := bufio.NewReader(chatStream)
 	writer := bufio.NewWriter(chatStream)
 
-	scanner := bufio.NewScanner(os.Stdin)
-
 	for {
-		fmt.Print("Enter a message to send to the server: ")
-		if !scanner.Scan() {
-			fmt.Println("Error reading input:", scanner.Err())
+		message, err := readUserInput("Enter a message to send to the server: ")
+		if err != nil {
+			fmt.Println("Error reading input:", err)
 			break
 		}
-		message := scanner.Text()
 
-		// Send the message to the server
-		var err error
 		_, err = writer.WriteString(message + "\n")
 		if err != nil {
 			fmt.Println("Error writing to server:", err)
@@ -109,7 +109,6 @@ func handleChatStream(ctx context.Context, h host.Host, info *peer.AddrInfo) {
 		}
 		writer.Flush()
 
-		// Read the server's response
 		response, err := reader.ReadString('\n')
 		if err != nil {
 			fmt.Println("Error reading from server:", err)
@@ -117,37 +116,40 @@ func handleChatStream(ctx context.Context, h host.Host, info *peer.AddrInfo) {
 		}
 		fmt.Printf("Received response from server: %s\n", response)
 
-		fmt.Print("Do you want to continue (yes/no)? ")
-		if !scanner.Scan() {
-			fmt.Println("Error reading input:", scanner.Err())
+		confirmation, err := readUserInput("Do you want to continue (yes/no)? ")
+		if err != nil {
+			fmt.Println("Error reading input:", err)
 			break
 		}
-		confirmation := scanner.Text()
 		if confirmation != "yes" {
 			break
 		}
 	}
-
-	if err := scanner.Err(); err != nil {
-		fmt.Println("Error reading input:", err)
-	}
 }
 
 func handleFileShareStream(ctx context.Context, h host.Host, info *peer.AddrInfo) {
+	fileShareStream, err := openStream(ctx, h, info, "/fileshare/1.0.0")
+	if err != nil {
+		fmt.Println("Error opening file share stream:", err)
+		return
+	}
 
-	fileShareStream := openStream(ctx, h, info, "/fileshare/1.0.0")
-	// reader := bufio.NewReader(chatStream)
-	// writer := bufio.NewWriter(chatStream)
+	// filePath, err := readUserInput("Enter the path of the file to send: ")
+	// if err != nil {
+	//     fmt.Println("Error reading input:", err)
+	//     return
+	// }
+
+	filePath := "D:\\FTP\\repo\\LibP2P\\send.png\n"
 
 	fileWriter := bufio.NewWriter(fileShareStream)
-	_, err := fileWriter.WriteString("D:\\FTP\\repo\\LibP2P\\send.png\n")
+	_, err = fileWriter.WriteString(filePath + "\n")
 	if err != nil {
 		fmt.Println("Error sending file path:", err)
 		return
 	}
 	fileWriter.Flush()
 
-	// Handle file reception
 	fileReader := bufio.NewReader(fileShareStream)
 	fileContents, err := io.ReadAll(fileReader)
 	if err != nil {
@@ -161,12 +163,11 @@ func handleFileShareStream(ctx context.Context, h host.Host, info *peer.AddrInfo
 		return
 	}
 
-	err = os.WriteFile("received_file.png", fileContents, 0644)
+	err = os.WriteFile("received_files/received_file.png", fileContents, 0644)
 	if err != nil {
 		fmt.Println("Error writing file:", err)
 		return
 	}
 
 	fmt.Println("File received successfully")
-
 }
