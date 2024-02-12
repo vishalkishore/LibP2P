@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -17,14 +16,6 @@ import (
 )
 
 func main() {
-	hostAddr := flag.String("host", "", "Host address")
-	flag.Parse()
-
-	if *hostAddr == "" {
-		fmt.Println("Error: Host address must be provided")
-		os.Exit(1)
-	}
-
 	ctx := context.Background()
 
 	h, err := createHost()
@@ -34,7 +25,7 @@ func main() {
 	}
 	defer h.Close()
 
-	info, err := getServerInfo("/ip4/127.0.0.1/tcp/8080/p2p/QmTACRYYczNc7qfxpseR1Meac6NHiSbCczvjbJvMHGWjsA")
+	info, err := getServerInfo("/ip4/127.0.0.1/tcp/8080/p2p/QmeGovfdwqdYThZ5qkwAUREvnp1kkLuV6d1iMEj1MhZqcR")
 	if err != nil {
 		fmt.Println("Error getting server info:", err)
 		return
