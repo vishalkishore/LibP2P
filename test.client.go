@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -16,6 +17,14 @@ import (
 )
 
 func main() {
+	hostAddr := flag.String("host", "", "Host address")
+	flag.Parse()
+
+	if *hostAddr == "" {
+		fmt.Println("Error: Host address must be provided")
+		os.Exit(1)
+	}
+
 	ctx := context.Background()
 
 	h, err := createHost()
