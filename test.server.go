@@ -23,6 +23,12 @@ import (
 	// "github.com/libp2p/go-libp2p/p2p/security/noise"
 )
 
+const (
+	ChatProtocolVersion      = "/chat/1.0.0"
+	FileShareProtocolVersion = "/fileshare/1.0.0"
+	ChunkSize                = 1024 // Size of each chunk in bytes
+)
+
 var listenAddr = flag.String("listen", "/ip4/127.0.0.1/tcp/8080", "The address to listen on")
 
 func main() {
@@ -91,7 +97,7 @@ func getPeerInfo(node host.Host) peer.AddrInfo {
 }
 
 func setChatStreamHandler(node host.Host) {
-	node.SetStreamHandler(protocol.ID("/chat/1.0.0"), func(s network.Stream) {
+	node.SetStreamHandler(protocol.ID(ChatProtocolVersion), func(s network.Stream) {
 		fmt.Println("New stream opened")
 		reader := bufio.NewReader(s)
 		writer := bufio.NewWriter(s)
@@ -127,12 +133,8 @@ func setChatStreamHandler(node host.Host) {
 	})
 }
 
-const fileShareProtocolID = protocol.ID("/fileshare/1.0.0")
-
-const chunkSize = 1024 // Size of each chunk in bytes
-
 func setFileShareStreamHandler(node host.Host) {
-	node.SetStreamHandler(fileShareProtocolID, func(s network.Stream) {
+	node.SetStreamHandler(protocol.ID(FileShareProtocolVersion), func(s network.Stream) {
 		fmt.Println("New file share stream opened")
 		reader := bufio.NewReader(s)
 		writer := bufio.NewWriter(s)
@@ -162,7 +164,7 @@ func setFileShareStreamHandler(node host.Host) {
 		defer file.Close()
 
 		// Send the file contents to the client in chunks
-		buf := make([]byte, chunkSize)
+		buf := make([]byte, ChunkSize)
 		for {
 			n, err := file.Read(buf)
 			if err != nil {
