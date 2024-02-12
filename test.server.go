@@ -9,15 +9,18 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	libp2p "github.com/libp2p/go-libp2p"
+
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	// "github.com/libp2p/go-libp2p/p2p/security/noise"
 )
 
 var listenAddr = flag.String("listen", "/ip4/127.0.0.1/tcp/8080", "The address to listen on")
@@ -35,11 +38,27 @@ func main() {
 	}
 
 	setStreamHandler(node)
+	setFileShareStreamHandler(node)
 
 	log.Printf("Server is listening on %s", combinedAddr[0])
 
 	waitForSignal(node)
 }
+
+// func initNode(listenAddr string) host.Host {
+// 	priv, _, err := crypto.GenerateKeyPair(crypto.RSA, 2048)
+// 	if err != nil {
+// 		log.Fatalf("Error generating key pair: %v", err)
+// 	}
+
+// 	node, err := libp2p.New(libp2p.Identity(priv),
+// 		libp2p.ListenAddrStrings(listenAddr),
+// 	)
+// 	if err != nil {
+// 		log.Fatalf("Error creating libp2p node: %v", err)
+// 	}
+// 	return node
+// }
 
 func initNode(listenAddr string) host.Host {
 	priv, _, err := crypto.GenerateKeyPair(crypto.RSA, 2048)
@@ -47,8 +66,16 @@ func initNode(listenAddr string) host.Host {
 		log.Fatalf("Error generating key pair: %v", err)
 	}
 
-	node, err := libp2p.New(libp2p.Identity(priv),
+	// Create a Noise transport with the generated private key.
+	// noiseTransport, err := noise.New(noise.ID, priv, nil)
+	// if err != nil {
+	// 	log.Fatalf("Error creating Noise transport: %v", err)
+	// }
+
+	node, err := libp2p.New(
+		libp2p.Identity(priv),
 		libp2p.ListenAddrStrings(listenAddr),
+		// libp2p.Security(noise.ID, noiseTransport), // Add Noise transport
 	)
 	if err != nil {
 		log.Fatalf("Error creating libp2p node: %v", err)
@@ -64,7 +91,7 @@ func getPeerInfo(node host.Host) peer.AddrInfo {
 }
 
 func setStreamHandler(node host.Host) {
-	node.SetStreamHandler(protocol.ID("/file-share"), func(s network.Stream) {
+	node.SetStreamHandler(protocol.ID("/chat/1.0.0"), func(s network.Stream) {
 		fmt.Println("New stream opened")
 		reader := bufio.NewReader(s)
 		writer := bufio.NewWriter(s)
@@ -94,6 +121,54 @@ func setStreamHandler(node host.Host) {
 		}
 
 		err := s.Close()
+		if err != nil {
+			fmt.Println("Error closing stream:", err)
+		}
+	})
+}
+
+const fileShareProtocolID = protocol.ID("/fileshare/1.0.0")
+
+func setFileShareStreamHandler(node host.Host) {
+	node.SetStreamHandler(fileShareProtocolID, func(s network.Stream) {
+		fmt.Println("New file share stream opened")
+		reader := bufio.NewReader(s)
+		writer := bufio.NewWriter(s)
+
+		// Read a message from the client
+		message, err := reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				fmt.Println("Client closed the connection")
+				return
+			}
+			fmt.Println("Error reading from client:", err)
+			sendError(writer, "Error reading from client")
+			return
+		}
+
+		// Assume the message is the name of the file the client wants
+		filename := strings.TrimSpace(message)
+
+		// Read the file
+		fileContents, err := os.ReadFile(filename)
+		if err != nil {
+			fmt.Println("Error reading file:", err)
+			sendError(writer, "Error reading file")
+			return
+		}
+
+		// Send the file contents to the client
+		_, err = writer.Write(fileContents)
+		if err != nil {
+			fmt.Println("Error sending file:", err)
+			sendError(writer, "Error sending file")
+			return
+		}
+
+		writer.Flush()
+
+		err = s.Close()
 		if err != nil {
 			fmt.Println("Error closing stream:", err)
 		}

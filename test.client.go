@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	libp2p "github.com/libp2p/go-libp2p"
@@ -20,7 +21,7 @@ func main() {
 	h := createHost()
 	defer h.Close()
 
-	info := getServerInfo("/ip4/127.0.0.1/tcp/8080/p2p/QmadYGN3eoVQD2A7U7pd1wT5St7pFcGcaFUjwZ7ojgqMoz")
+	info := getServerInfo("/ip4/127.0.0.1/tcp/8080/p2p/QmTACRYYczNc7qfxpseR1Meac6NHiSbCczvjbJvMHGWjsA")
 
 	connectToServer(ctx, h, info)
 	// if err != nil {
@@ -28,10 +29,66 @@ func main() {
 	// 	return
 	// }
 
-	s := openStream(ctx, h, info, "/file-share")
+	fmt.Println("Enter:\n1 for chat stream\n2 for file share stream:")
+	var choice int
+	_, err := fmt.Scan(&choice)
+	if err != nil {
+		fmt.Println("Error reading input:", err)
+		return
+	}
 
-	reader := bufio.NewReader(s)
-	writer := bufio.NewWriter(s)
+	switch choice {
+	case 1:
+		handleChatStream(ctx, h, info)
+	case 2:
+		handleFileShareStream(ctx, h, info)
+	default:
+		fmt.Println("Invalid choice")
+	}
+
+}
+
+func createHost() host.Host {
+	h, err := libp2p.New()
+	if err != nil {
+		panic(err)
+	}
+	return h
+}
+
+func getServerInfo(maddrStr string) *peer.AddrInfo {
+	maddr, err := ma.NewMultiaddr(maddrStr)
+	if err != nil {
+		panic(err)
+	}
+
+	info, err := peer.AddrInfoFromP2pAddr(maddr)
+	if err != nil {
+		panic(err)
+	}
+
+	return info
+}
+
+func connectToServer(ctx context.Context, h host.Host, info *peer.AddrInfo) {
+	err := h.Connect(ctx, *info)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func openStream(ctx context.Context, h host.Host, info *peer.AddrInfo, protocolID string) network.Stream {
+	s, err := h.NewStream(ctx, info.ID, protocol.ID(protocolID))
+	if err != nil {
+		panic(err)
+	}
+	return s
+}
+
+func handleChatStream(ctx context.Context, h host.Host, info *peer.AddrInfo) {
+	chatStream := openStream(ctx, h, info, "/chat/1.0.0")
+	reader := bufio.NewReader(chatStream) // Read from standard input
+	writer := bufio.NewWriter(chatStream)
 
 	scanner := bufio.NewScanner(os.Stdin)
 
@@ -76,39 +133,40 @@ func main() {
 	}
 }
 
-func createHost() host.Host {
-	h, err := libp2p.New()
-	if err != nil {
-		panic(err)
-	}
-	return h
-}
+func handleFileShareStream(ctx context.Context, h host.Host, info *peer.AddrInfo) {
 
-func getServerInfo(maddrStr string) *peer.AddrInfo {
-	maddr, err := ma.NewMultiaddr(maddrStr)
+	fileShareStream := openStream(ctx, h, info, "/fileshare/1.0.0")
+	// reader := bufio.NewReader(chatStream)
+	// writer := bufio.NewWriter(chatStream)
+
+	fileWriter := bufio.NewWriter(fileShareStream)
+	_, err := fileWriter.WriteString("D:\\FTP\\repo\\LibP2P\\send.png\n")
 	if err != nil {
-		panic(err)
+		fmt.Println("Error sending file path:", err)
+		return
+	}
+	fileWriter.Flush()
+
+	// Handle file reception
+	fileReader := bufio.NewReader(fileShareStream)
+	fileContents, err := io.ReadAll(fileReader)
+	if err != nil {
+		fmt.Println("Error reading file:", err)
+		return
 	}
 
-	info, err := peer.AddrInfoFromP2pAddr(maddr)
+	err = os.MkdirAll("received_files", 0755)
 	if err != nil {
-		panic(err)
+		fmt.Println("Error creating directory:", err)
+		return
 	}
 
-	return info
-}
-
-func connectToServer(ctx context.Context, h host.Host, info *peer.AddrInfo) {
-	err := h.Connect(ctx, *info)
+	err = os.WriteFile("received_file.png", fileContents, 0644)
 	if err != nil {
-		panic(err)
+		fmt.Println("Error writing file:", err)
+		return
 	}
-}
 
-func openStream(ctx context.Context, h host.Host, info *peer.AddrInfo, protocolID string) network.Stream {
-	s, err := h.NewStream(ctx, info.ID, protocol.ID(protocolID))
-	if err != nil {
-		panic(err)
-	}
-	return s
+	fmt.Println("File received successfully")
+
 }
