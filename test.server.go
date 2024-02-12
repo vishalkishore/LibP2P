@@ -37,7 +37,7 @@ func main() {
 		log.Fatalf("Error converting peer info to p2p addrs: %v", err)
 	}
 
-	setStreamHandler(node)
+	setChatStreamHandler(node)
 	setFileShareStreamHandler(node)
 
 	log.Printf("Server is listening on %s", combinedAddr[0])
@@ -90,7 +90,7 @@ func getPeerInfo(node host.Host) peer.AddrInfo {
 	}
 }
 
-func setStreamHandler(node host.Host) {
+func setChatStreamHandler(node host.Host) {
 	node.SetStreamHandler(protocol.ID("/chat/1.0.0"), func(s network.Stream) {
 		fmt.Println("New stream opened")
 		reader := bufio.NewReader(s)
@@ -129,6 +129,8 @@ func setStreamHandler(node host.Host) {
 
 const fileShareProtocolID = protocol.ID("/fileshare/1.0.0")
 
+const chunkSize = 1024 // Size of each chunk in bytes
+
 func setFileShareStreamHandler(node host.Host) {
 	node.SetStreamHandler(fileShareProtocolID, func(s network.Stream) {
 		fmt.Println("New file share stream opened")
@@ -150,23 +152,36 @@ func setFileShareStreamHandler(node host.Host) {
 		// Assume the message is the name of the file the client wants
 		filename := strings.TrimSpace(message)
 
-		// Read the file
-		fileContents, err := os.ReadFile(filename)
+		// Open the file
+		file, err := os.Open(filename)
 		if err != nil {
-			fmt.Println("Error reading file:", err)
-			sendError(writer, "Error reading file")
+			fmt.Println("Error opening file:", err)
+			sendError(writer, "Error opening file")
 			return
 		}
+		defer file.Close()
 
-		// Send the file contents to the client
-		_, err = writer.Write(fileContents)
-		if err != nil {
-			fmt.Println("Error sending file:", err)
-			sendError(writer, "Error sending file")
-			return
+		// Send the file contents to the client in chunks
+		buf := make([]byte, chunkSize)
+		for {
+			n, err := file.Read(buf)
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				fmt.Println("Error reading file:", err)
+				sendError(writer, "Error reading file")
+				return
+			}
+
+			_, err = writer.Write(buf[:n])
+			if err != nil {
+				fmt.Println("Error sending file:", err)
+				sendError(writer, "Error sending file")
+				return
+			}
+			writer.Flush()
 		}
-
-		writer.Flush()
 
 		err = s.Close()
 		if err != nil {

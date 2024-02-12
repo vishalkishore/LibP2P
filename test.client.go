@@ -134,12 +134,6 @@ func handleFileShareStream(ctx context.Context, h host.Host, info *peer.AddrInfo
 		return
 	}
 
-	// filePath, err := readUserInput("Enter the path of the file to send: ")
-	// if err != nil {
-	//     fmt.Println("Error reading input:", err)
-	//     return
-	// }
-
 	filePath := "D:\\FTP\\repo\\LibP2P\\send.png\n"
 
 	fileWriter := bufio.NewWriter(fileShareStream)
@@ -150,23 +144,36 @@ func handleFileShareStream(ctx context.Context, h host.Host, info *peer.AddrInfo
 	}
 	fileWriter.Flush()
 
-	fileReader := bufio.NewReader(fileShareStream)
-	fileContents, err := io.ReadAll(fileReader)
-	if err != nil {
-		fmt.Println("Error reading file:", err)
-		return
-	}
-
 	err = os.MkdirAll("received_files", 0755)
 	if err != nil {
 		fmt.Println("Error creating directory:", err)
 		return
 	}
 
-	err = os.WriteFile("received_files/received_file.png", fileContents, 0644)
+	outFile, err := os.Create("received_files/received_file.png")
 	if err != nil {
-		fmt.Println("Error writing file:", err)
+		fmt.Println("Error creating file:", err)
 		return
+	}
+	defer outFile.Close()
+
+	fileReader := bufio.NewReader(fileShareStream)
+	buf := make([]byte, 1024) // Size of each chunk in bytes
+	for {
+		n, err := fileReader.Read(buf)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			fmt.Println("Error reading file:", err)
+			return
+		}
+
+		_, err = outFile.Write(buf[:n])
+		if err != nil {
+			fmt.Println("Error writing file:", err)
+			return
+		}
 	}
 
 	fmt.Println("File received successfully")
